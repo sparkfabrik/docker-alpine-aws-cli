@@ -1,0 +1,90 @@
+name: Docker
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+
+env:
+  IMAGE_NAME: docker-alpine-aws-cli
+  PLATFORM: "linux/amd64,linux/arm64"
+
+jobs:
+  test-multiarch:
+    runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/main'
+    strategy:
+      matrix:
+        tag:
+          - 2.9.4-3.16
+          - 2.9.4-3.15
+          - 2.9.2-3.16
+          - 2.9.2-3.15
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Only build the images
+        run: |
+          AWS_CLI_VERSION="$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')"
+          ALPINE_VERSION="$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')"
+          AUTHOR=$(echo "${{ github.repository_owner }}" | tr '[A-Z]' '[a-z]')
+          # Build process
+          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:${AWS_CLI_VERSION}-alpine${ALPINE_VERSION}
+          # Change all uppercase to lowercase.
+          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+          echo "IMAGE_ID=${IMAGE_ID}"
+          docker buildx build --load . \
+            --platform "${PLATFORM}" \
+            --build-arg AUTHOR=${AUTHOR} \
+            --build-arg IMAGE_NAME=${IMAGE_NAME} \
+            --build-arg ALPINE_VERSION=${ALPINE_VERSION} \
+            --build-arg AWS_CLI_VERSION=${AWS_CLI_VERSION} \
+            -t ${IMAGE_ID}
+
+  deploy-multiarch:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      matrix:
+        tag:
+          - 2.9.4-3.16
+          - 2.9.4-3.15
+          - 2.9.2-3.16
+          - 2.9.2-3.15
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Log into GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login https://ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build and push images to GitHub Container Registry
+        run: |
+          AWS_CLI_VERSION="$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')"
+          ALPINE_VERSION="$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')"
+          AUTHOR=$(echo "${{ github.repository_owner }}" | tr '[A-Z]' '[a-z]')
+          # Build process
+          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:${AWS_CLI_VERSION}-alpine${ALPINE_VERSION}
+          # Change all uppercase to lowercase.
+          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+          echo "IMAGE_ID=${IMAGE_ID}"
+          docker buildx build --push . \
+            --platform "${PLATFORM}" \
+            --build-arg AUTHOR=${AUTHOR} \
+            --build-arg IMAGE_NAME=${IMAGE_NAME} \
+            --build-arg ALPINE_VERSION=${ALPINE_VERSION} \
+            --build-arg AWS_CLI_VERSION=${AWS_CLI_VERSION} \
+            -t ${IMAGE_ID}
