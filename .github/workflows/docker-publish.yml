@@ -18,6 +18,8 @@ jobs:
     strategy:
       matrix:
         tag:
+          - 2.9.8-3.16
+          - 2.9.8-3.15
           - 2.9.4-3.16
           - 2.9.4-3.15
           - 2.9.2-3.16
@@ -41,7 +43,7 @@ jobs:
           # Change all uppercase to lowercase.
           IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
           echo "IMAGE_ID=${IMAGE_ID}"
-          docker buildx build --load . \
+          docker buildx build . \
             --platform "${PLATFORM}" \
             --build-arg AUTHOR=${AUTHOR} \
             --build-arg IMAGE_NAME=${IMAGE_NAME} \
@@ -55,6 +57,8 @@ jobs:
     strategy:
       matrix:
         tag:
+          - 2.9.8-3.16
+          - 2.9.8-3.15
           - 2.9.4-3.16
           - 2.9.4-3.15
           - 2.9.2-3.16
