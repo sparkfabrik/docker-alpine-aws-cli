@@ -35,6 +35,10 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          # Use the previous version of buildx https://github.com/docker/buildx/releases
+          # to solve https://github.com/docker/build-push-action/issues/761
+          version: v0.9.1
 
       - name: Only build the images
         run: |
@@ -72,14 +76,23 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Log into GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login https://ghcr.io -u ${{ github.actor }} --password-stdin
+      # Refs https://github.com/docker/login-action#github-container-registry
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          # Use the previous version of buildx https://github.com/docker/buildx/releases
+          # to solve https://github.com/docker/build-push-action/issues/761
+          version: v0.9.1
 
       - name: Build and push images to GitHub Container Registry
         run: |
