@@ -36,3 +36,5 @@ LABEL org.opencontainers.image.source https://github.com/${AUTHOR}/${IMAGE_NAME}
 # Install AWS CLI v2 using the binary created in the builder stage
 COPY --from=builder /usr/local/aws-cli/ /usr/local/aws-cli/
 COPY --from=builder /aws-cli-bin/ /usr/local/bin/
+
+RUN apk add --no-cache bash
