@@ -2,32 +2,32 @@ AUTHOR ?= sparkfabrik
 IMAGE_NAME ?= docker-alpine-aws-cli
 PLATFORM ?= "linux/amd64"
 
-build: build-2.11.18-3.17
+build: build-2.12.0-3.18
 
 # To keep the number of builds low, we only keep the latest two versions of the AWS CLI
+build-2.12.0-3.18: AWS_CLI_VERSION="2.12.0"
+build-2.12.0-3.18: ALPINE_VERSION="3.18"
+build-2.12.0-3.18: build-template
+
+build-2.12.0-3.17: AWS_CLI_VERSION="2.12.0"
+build-2.12.0-3.17: ALPINE_VERSION="3.17"
+build-2.12.0-3.17: build-template
+
+build-2.12.0-3.16: AWS_CLI_VERSION="2.12.0"
+build-2.12.0-3.16: ALPINE_VERSION="3.16"
+build-2.12.0-3.16: build-template
+
+build-2.11.18-3.18: AWS_CLI_VERSION="2.11.18"
+build-2.11.18-3.18: ALPINE_VERSION="3.18"
+build-2.11.18-3.18: build-template
+
 build-2.11.18-3.17: AWS_CLI_VERSION="2.11.18"
 build-2.11.18-3.17: ALPINE_VERSION="3.17"
 build-2.11.18-3.17: build-template
 
-build-2.11.2-3.17: AWS_CLI_VERSION="2.11.2"
-build-2.11.2-3.17: ALPINE_VERSION="3.17"
-build-2.11.2-3.17: build-template
-
 build-2.11.18-3.16: AWS_CLI_VERSION="2.11.18"
 build-2.11.18-3.16: ALPINE_VERSION="3.16"
 build-2.11.18-3.16: build-template
-
-build-2.11.2-3.16: AWS_CLI_VERSION="2.11.2"
-build-2.11.2-3.16: ALPINE_VERSION="3.16"
-build-2.11.2-3.16: build-template
-
-build-2.11.18-3.15: AWS_CLI_VERSION="2.11.18"
-build-2.11.18-3.15: ALPINE_VERSION="3.15"
-build-2.11.18-3.15: build-template
-
-build-2.11.2-3.15: AWS_CLI_VERSION="2.11.2"
-build-2.11.2-3.15: ALPINE_VERSION="3.15"
-build-2.11.2-3.15: build-template
 
 build-template:
 	docker buildx build --load . \
