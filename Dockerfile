@@ -5,7 +5,7 @@ FROM python:3.10.11-alpine${ALPINE_VERSION} as builder
 ARG AUTHOR
 ARG ALPINE_VERSION=3.18
 ARG IMAGE_NAME=spark-alpine-aws-cli
-ARG AWS_CLI_VERSION=2.13.18
+ARG AWS_CLI_VERSION=2.15.0
 
 # Build process
 RUN apk add --no-cache git unzip groff build-base libffi-dev cmake
