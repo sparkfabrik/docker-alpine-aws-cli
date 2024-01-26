@@ -28,24 +28,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-          tags: |
-            # set latest tag for main branch
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) }}
-            type=sha,format=long,prefix=
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Get variables
         id: vars
         run: |
+          echo "latest_image_tag=$(make print-latest-image-tag)" >> "$GITHUB_OUTPUT"
           echo "aws_cli_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')" >> "$GITHUB_OUTPUT"
           echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
+          echo "static_tag=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')-alpine$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.vars.outputs.static_tag }},enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) }}
+            # set latest tag for main branch and if the static_tag is the latest version configured in the Makefile
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) && steps.vars.outputs.static_tag == steps.vars.outputs.latest_image_tag }}
+            type=sha,format=long,prefix=${{ steps.vars.outputs.static_tag }}-
 
       - name: Build Docker image
         uses: docker/build-push-action@v5
@@ -75,15 +78,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
+      # We use commit sha here to be as safe as possible with credentials.
+      - name: Log in to the Container registry
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-          tags: |
-            # set latest tag for main branch
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) }}
-            type=sha,format=long,prefix=
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -91,8 +92,21 @@ jobs:
       - name: Get variables
         id: vars
         run: |
+          echo "latest_image_tag=$(make print-latest-image-tag)" >> "$GITHUB_OUTPUT"
           echo "aws_cli_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')" >> "$GITHUB_OUTPUT"
           echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
+          echo "static_tag=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')-alpine$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.vars.outputs.static_tag }},enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) }}
+            # set latest tag for main branch and if the static_tag is the latest version configured in the Makefile
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) && steps.vars.outputs.static_tag == steps.vars.outputs.latest_image_tag }}
+            type=sha,format=long,prefix=${{ steps.vars.outputs.static_tag }}-
 
       - name: Build Docker image
         uses: docker/build-push-action@v5

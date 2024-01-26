@@ -1,6 +1,7 @@
 AUTHOR ?= sparkfabrik
 IMAGE_NAME ?= docker-alpine-aws-cli
 PLATFORM ?= "linux/amd64"
+LATEST_VERSION ?= 2.15.14-alpine3.18
 
 build: build-2.15.14-3.18
 
@@ -37,3 +38,6 @@ build-template:
 		--build-arg ALPINE_VERSION=$(ALPINE_VERSION) \
 		--build-arg AWS_CLI_VERSION=$(AWS_CLI_VERSION) \
 		-t $(AUTHOR)/$(IMAGE_NAME):$(AWS_CLI_VERSION)-alpine$(ALPINE_VERSION)
+
+print-latest-image-tag:
+	@echo $(LATEST_VERSION)
