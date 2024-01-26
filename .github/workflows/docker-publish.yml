@@ -1,101 +1,107 @@
 name: Docker
+
 on:
-  push:
-    branches:
-      - "main"
   pull_request:
-    branches:
-      - "main"
+  push:
+    branches: main
 
 env:
+  RELEASE_BRANCH: main
+  REGISTRY: ghcr.io
   IMAGE_NAME: docker-alpine-aws-cli
-  PLATFORM: "linux/amd64,linux/arm64"
+  PLATFORMS: "linux/amd64,linux/arm64"
 
 jobs:
-  test-multiarch:
+  test:
     runs-on: ubuntu-latest
     if: github.ref != 'refs/heads/main'
     strategy:
       matrix:
         tag:
           # To keep the number of builds low, we only keep the latest two versions of the AWS CLI
+          - 2.15.14-3.18
+          - 2.15.14-3.17
+          - 2.15.14-3.16
           - 2.15.0-3.18
           - 2.15.0-3.17
           - 2.15.0-3.16
-          - 2.13.18-3.18
-          - 2.13.18-3.17
-          - 2.13.18-3.16
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # set latest tag for main branch
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) }}
+            type=sha,format=long,prefix=
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
-      - name: Only build the images
+      - name: Get variables
+        id: vars
         run: |
-          AWS_CLI_VERSION="$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')"
-          ALPINE_VERSION="$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')"
-          AUTHOR=$(echo "${{ github.repository_owner }}" | tr '[A-Z]' '[a-z]')
-          # Build process
-          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:${AWS_CLI_VERSION}-alpine${ALPINE_VERSION}
-          # Change all uppercase to lowercase.
-          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
-          echo "IMAGE_ID=${IMAGE_ID}"
-          docker buildx build . \
-            --platform "${PLATFORM}" \
-            --build-arg AUTHOR=${AUTHOR} \
-            --build-arg IMAGE_NAME=${IMAGE_NAME} \
-            --build-arg ALPINE_VERSION=${ALPINE_VERSION} \
-            --build-arg AWS_CLI_VERSION=${AWS_CLI_VERSION} \
-            -t ${IMAGE_ID}
+          echo "aws_cli_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')" >> "$GITHUB_OUTPUT"
+          echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
 
-  deploy-multiarch:
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          load: true
+          push: false
+          context: .
+          build-args: |
+            AWS_CLI_VERSION=${{ steps.vars.outputs.aws_cli_version }}
+            ALPINE_VERSION=${{ steps.vars.outputs.alpine_version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: contains('["refs/heads/main", "refs/heads/master"]', github.ref)
     strategy:
       matrix:
         tag:
           # To keep the number of builds low, we only keep the latest two versions of the AWS CLI
+          - 2.15.14-3.18
+          - 2.15.14-3.17
+          - 2.15.14-3.16
           - 2.15.0-3.18
           - 2.15.0-3.17
           - 2.15.0-3.16
-          - 2.13.18-3.18
-          - 2.13.18-3.17
-          - 2.13.18-3.16
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      # Refs https://github.com/docker/login-action#github-container-registry
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # set latest tag for main branch
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) }}
+            type=sha,format=long,prefix=
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build and push images to GitHub Container Registry
+      - name: Get variables
+        id: vars
         run: |
-          AWS_CLI_VERSION="$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')"
-          ALPINE_VERSION="$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')"
-          AUTHOR=$(echo "${{ github.repository_owner }}" | tr '[A-Z]' '[a-z]')
-          # Build process
-          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:${AWS_CLI_VERSION}-alpine${ALPINE_VERSION}
-          # Change all uppercase to lowercase.
-          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
-          echo "IMAGE_ID=${IMAGE_ID}"
-          docker buildx build --push . \
-            --platform "${PLATFORM}" \
-            --build-arg AUTHOR=${AUTHOR} \
-            --build-arg IMAGE_NAME=${IMAGE_NAME} \
-            --build-arg ALPINE_VERSION=${ALPINE_VERSION} \
-            --build-arg AWS_CLI_VERSION=${AWS_CLI_VERSION} \
-            -t ${IMAGE_ID}
+          echo "aws_cli_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')" >> "$GITHUB_OUTPUT"
+          echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          platforms: ${{ env.PLATFORMS }}
+          context: .
+          build-args: |
+            AWS_CLI_VERSION=${{ steps.vars.outputs.aws_cli_version }}
+            ALPINE_VERSION=${{ steps.vars.outputs.alpine_version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
