@@ -1,13 +1,16 @@
-ARG ALPINE_VERSION=3.18
+ARG PYTHON_VERSION=3.11.9
+ARG ALPINE_VERSION=3.19
 
-FROM python:3.10.11-alpine${ALPINE_VERSION} as builder
+FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} as builder
 
 ARG AUTHOR
-ARG ALPINE_VERSION=3.18
+ARG PYTHON_VERSION=3.11.9
+ARG ALPINE_VERSION=3.19
 ARG IMAGE_NAME=spark-alpine-aws-cli
-ARG AWS_CLI_VERSION=2.15.14
+ARG AWS_CLI_VERSION=2.15.42
 
 # Build process
+# If you want to see the AWS CLI v2 documentation, remember to go to the `v2` branch.
 RUN apk add --no-cache git unzip groff build-base libffi-dev cmake
 WORKDIR /
 RUN git clone --single-branch --depth 1 -b ${AWS_CLI_VERSION} https://github.com/aws/aws-cli.git
