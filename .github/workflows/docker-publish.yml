@@ -19,12 +19,10 @@ jobs:
       matrix:
         tag:
           # To keep the number of builds low, we only keep the latest two versions of the AWS CLI
-          - 2.15.14-3.18
-          - 2.15.14-3.17
-          - 2.15.14-3.16
-          - 2.15.0-3.18
-          - 2.15.0-3.17
-          - 2.15.0-3.16
+          - 2.15.42-3.11.9-3.19
+          - 2.15.42-3.11.9-3.18
+          - 2.15.14-3.11.9-3.19
+          - 2.15.14-3.11.9-3.18
     steps:
       - uses: actions/checkout@v4
 
@@ -36,8 +34,9 @@ jobs:
         run: |
           echo "latest_image_tag=$(make print-latest-image-tag)" >> "$GITHUB_OUTPUT"
           echo "aws_cli_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')" >> "$GITHUB_OUTPUT"
-          echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
-          echo "static_tag=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')-alpine$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
+          echo "python_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
+          echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[3]}')" >> "$GITHUB_OUTPUT"
+          echo "static_tag=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')-alpine$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[3]}')" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -58,6 +57,7 @@ jobs:
           context: .
           build-args: |
             AWS_CLI_VERSION=${{ steps.vars.outputs.aws_cli_version }}
+            PYTHON_VERSION=${{ steps.vars.outputs.python_version }}
             ALPINE_VERSION=${{ steps.vars.outputs.alpine_version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -69,12 +69,10 @@ jobs:
       matrix:
         tag:
           # To keep the number of builds low, we only keep the latest two versions of the AWS CLI
-          - 2.15.14-3.18
-          - 2.15.14-3.17
-          - 2.15.14-3.16
-          - 2.15.0-3.18
-          - 2.15.0-3.17
-          - 2.15.0-3.16
+          - 2.15.42-3.11.9-3.19
+          - 2.15.42-3.11.9-3.18
+          - 2.15.14-3.11.9-3.19
+          - 2.15.14-3.11.9-3.18
     steps:
       - uses: actions/checkout@v4
 
@@ -94,8 +92,9 @@ jobs:
         run: |
           echo "latest_image_tag=$(make print-latest-image-tag)" >> "$GITHUB_OUTPUT"
           echo "aws_cli_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')" >> "$GITHUB_OUTPUT"
-          echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
-          echo "static_tag=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')-alpine$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
+          echo "python_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
+          echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[3]}')" >> "$GITHUB_OUTPUT"
+          echo "static_tag=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')-alpine$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[3]}')" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -116,6 +115,7 @@ jobs:
           context: .
           build-args: |
             AWS_CLI_VERSION=${{ steps.vars.outputs.aws_cli_version }}
+            PYTHON_VERSION=${{ steps.vars.outputs.python_version }}
             ALPINE_VERSION=${{ steps.vars.outputs.alpine_version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
