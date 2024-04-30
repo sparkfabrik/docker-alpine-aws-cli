@@ -28,10 +28,8 @@ RUN find /usr/local/aws-cli/v2/current/dist/awscli/botocore/data -name examples-
 
 FROM alpine:${ALPINE_VERSION}
 
-RUN apk add --no-cache groff
+RUN apk add --no-cache bash groff
 
 # Install AWS CLI v2 using the binary created in the builder stage
 COPY --from=builder /usr/local/aws-cli/ /usr/local/aws-cli/
 COPY --from=builder /aws-cli-bin/ /usr/local/bin/
-
-RUN apk add --no-cache bash
