@@ -7,7 +7,7 @@ Docker image for AWS-CLI v2 on Alpine Linux.
 You can import the compiled binary created in this image in your Alpine Linux image.
 
 ```bash
-FROM ghcr.io/sparkfabrik/docker-alpine-aws-cli:2.15.42-alpine3.19 as awscli
+FROM ghcr.io/sparkfabrik/docker-alpine-aws-cli:2.16.7-alpine3.19 as awscli
 
 FROM alpine:3.19
 # Install AWS CLI v2 using the binary builded in the awscli stage
