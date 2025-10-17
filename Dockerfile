@@ -1,13 +1,13 @@
-ARG PYTHON_VERSION=3.11.11
+ARG PYTHON_VERSION=3.12.4
 ARG ALPINE_VERSION=3.20
 
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS builder
 
 ARG AUTHOR
-ARG PYTHON_VERSION=3.11.11
+ARG PYTHON_VERSION=3.12.4
 ARG ALPINE_VERSION=3.20
 ARG IMAGE_NAME=spark-alpine-aws-cli
-ARG AWS_CLI_VERSION=2.25.6
+ARG AWS_CLI_VERSION=2.31.17
 
 # Build process
 # If you want to see the AWS CLI v2 documentation, remember to go to the `v2` branch.
