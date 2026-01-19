@@ -1,4 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>sparkfabrik/renovatebot-default-configuration"]
+  "extends": ["github>sparkfabrik/renovatebot-default-configuration"],
+  "packageRules": [
+    {
+      "matchManagers": ["dockerfile"],
+      "description": "Disable all Docker updates because the versions must be checked manually (gcloud alpine version, python version, etc.).",
+      "enabled": false
+    }
+  ]
 }
