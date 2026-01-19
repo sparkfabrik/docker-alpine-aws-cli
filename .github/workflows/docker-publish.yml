@@ -50,7 +50,7 @@ jobs:
             type=sha,format=long,prefix=${{ steps.vars.outputs.static_tag }}-
 
       - name: Build Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           load: true
           push: false
@@ -108,7 +108,7 @@ jobs:
             type=sha,format=long,prefix=${{ steps.vars.outputs.static_tag }}-
 
       - name: Build Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           push: true
           platforms: ${{ env.PLATFORMS }}
