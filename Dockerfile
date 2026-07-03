@@ -7,7 +7,7 @@ ARG AUTHOR
 ARG PYTHON_VERSION=3.12.4
 ARG ALPINE_VERSION=3.20
 ARG IMAGE_NAME=spark-alpine-aws-cli
-ARG AWS_CLI_VERSION=2.33.2
+ARG AWS_CLI_VERSION=2.35.15
 
 # Build process
 # If you want to see the AWS CLI v2 documentation, remember to go to the `v2` branch.
@@ -18,6 +18,9 @@ RUN git clone --single-branch --depth 1 -b ${AWS_CLI_VERSION} https://github.com
 WORKDIR /aws-cli
 RUN python -m venv venv
 RUN . venv/bin/activate
+# aws-cli's make-exe still imports distutils, removed from the Python 3.12 stdlib.
+# setuptools < 74 vendors a distutils shim; newer Alpine Python images ship setuptools >= 74 without it.
+RUN pip install --no-cache-dir --break-system-packages "setuptools<74"
 RUN scripts/installers/make-exe
 RUN unzip -q dist/awscli-exe.zip
 RUN aws/install --bin-dir /aws-cli-bin
