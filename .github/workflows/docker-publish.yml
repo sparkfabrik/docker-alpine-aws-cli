@@ -9,13 +9,19 @@ env:
   RELEASE_BRANCH: main
   REGISTRY: ghcr.io
   IMAGE_NAME: docker-alpine-aws-cli
-  PLATFORMS: "linux/amd64,linux/arm64"
+
+# Least-privilege token: read the repo for checkout, push images to GHCR.
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
     if: github.ref != 'refs/heads/main'
+    name: test ${{ matrix.tag }}
     strategy:
+      fail-fast: false
       matrix:
         tag:
           # To keep the number of builds low, we only keep the latest two versions of the AWS CLI
@@ -24,48 +30,41 @@ jobs:
           - 2.33.2-3.12.13-3.23
           - 2.33.2-3.12.4-3.20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
+      # The test job builds a single native (amd64) image with --load, so it
+      # does not need QEMU.
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Get variables
         id: vars
         run: |
-          echo "latest_image_tag=$(make print-latest-image-tag)" >> "$GITHUB_OUTPUT"
           echo "aws_cli_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')" >> "$GITHUB_OUTPUT"
           echo "python_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
           echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[3]}')" >> "$GITHUB_OUTPUT"
           echo "static_tag=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')-alpine$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[3]}')" >> "$GITHUB_OUTPUT"
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ steps.vars.outputs.static_tag }},enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) }}
-            # set latest tag for main branch and if the static_tag is the latest version configured in the Makefile
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) && steps.vars.outputs.static_tag == steps.vars.outputs.latest_image_tag }}
-            type=sha,format=long,prefix=${{ steps.vars.outputs.static_tag }}-
-
       - name: Build Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           load: true
           push: false
           context: .
+          cache-from: type=gha,scope=${{ matrix.tag }}-amd64
+          cache-to: type=gha,mode=max,scope=${{ matrix.tag }}-amd64
           build-args: |
             AWS_CLI_VERSION=${{ steps.vars.outputs.aws_cli_version }}
             PYTHON_VERSION=${{ steps.vars.outputs.python_version }}
             ALPINE_VERSION=${{ steps.vars.outputs.alpine_version }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.static_tag }}
 
-  deploy:
-    runs-on: ubuntu-latest
+  build:
     if: contains('["refs/heads/main", "refs/heads/master"]', github.ref)
+    runs-on: ${{ matrix.platform.runner }}
+    name: build ${{ matrix.tag }} (${{ matrix.platform.arch }})
     strategy:
+      fail-fast: false
       matrix:
         tag:
           # To keep the number of builds low, we only keep the latest two versions of the AWS CLI
@@ -73,32 +72,112 @@ jobs:
           - 2.35.15-3.12.4-3.20
           - 2.33.2-3.12.13-3.23
           - 2.33.2-3.12.4-3.20
+        # Each platform is a self-contained object (name/runner/arch) so the
+        # runner and arch are always defined; amd64 builds on ubuntu-latest and
+        # arm64 on a native ubuntu-24.04-arm runner (no QEMU emulation).
+        platform:
+          - name: linux/amd64
+            runner: ubuntu-latest
+            arch: amd64
+          - name: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # We use commit sha here to be as safe as possible with credentials.
       - name: Log in to the Container registry
-        uses: docker/login-action@0567fa5ae8c9a197cb207537dc5cbb43ca3d803f
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
+
+      - name: Get variables
+        id: vars
+        run: |
+          echo "aws_cli_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')" >> "$GITHUB_OUTPUT"
+          echo "python_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
+          echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[3]}')" >> "$GITHUB_OUTPUT"
+
+      # Build single-arch and push by digest (no tag); the merge job assembles
+      # the final multi-arch tags from the per-arch digests.
+      - name: Build and push image digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform.name }}
+          cache-from: type=gha,scope=${{ matrix.tag }}-${{ matrix.platform.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.tag }}-${{ matrix.platform.arch }}
+          build-args: |
+            AWS_CLI_VERSION=${{ steps.vars.outputs.aws_cli_version }}
+            PYTHON_VERSION=${{ steps.vars.outputs.python_version }}
+            ALPINE_VERSION=${{ steps.vars.outputs.alpine_version }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.tag }}-${{ matrix.platform.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [build]
+    if: contains('["refs/heads/main", "refs/heads/master"]', github.ref)
+    runs-on: ubuntu-latest
+    name: merge ${{ matrix.tag }}
+    strategy:
+      fail-fast: false
+      matrix:
+        tag:
+          - 2.35.15-3.12.13-3.23
+          - 2.35.15-3.12.4-3.20
+          - 2.33.2-3.12.13-3.23
+          - 2.33.2-3.12.4-3.20
+    steps:
+      - uses: actions/checkout@v7
+
+      # We use commit sha here to be as safe as possible with credentials.
+      - name: Log in to the Container registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          # The full triple differs per tag, so this glob only matches the two
+          # per-arch artifacts of this tag (no cross-tag prefix collision).
+          pattern: digests-${{ matrix.tag }}-*
+          merge-multiple: true
 
       - name: Get variables
         id: vars
         run: |
           echo "latest_image_tag=$(make print-latest-image-tag)" >> "$GITHUB_OUTPUT"
-          echo "aws_cli_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')" >> "$GITHUB_OUTPUT"
-          echo "python_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
-          echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[3]}')" >> "$GITHUB_OUTPUT"
           echo "static_tag=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[1]}')-alpine$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[3]}')" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -107,15 +186,14 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', env.RELEASE_BRANCH) && steps.vars.outputs.static_tag == steps.vars.outputs.latest_image_tag }}
             type=sha,format=long,prefix=${{ steps.vars.outputs.static_tag }}-
 
-      - name: Build Docker image
-        uses: docker/build-push-action@v6
-        with:
-          push: true
-          platforms: ${{ env.PLATFORMS }}
-          context: .
-          build-args: |
-            AWS_CLI_VERSION=${{ steps.vars.outputs.aws_cli_version }}
-            PYTHON_VERSION=${{ steps.vars.outputs.python_version }}
-            ALPINE_VERSION=${{ steps.vars.outputs.alpine_version }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      - name: Create and push multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect \
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.static_tag }}
