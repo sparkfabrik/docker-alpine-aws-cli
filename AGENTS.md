@@ -37,7 +37,7 @@ Each target sets `AWS_CLI_VERSION`, `PYTHON_VERSION`, `ALPINE_VERSION` and calls
 - **Versions are pinned in three places that must agree:**
   - `Dockerfile` `ARG` defaults (`PYTHON_VERSION`, `ALPINE_VERSION`, `AWS_CLI_VERSION`).
   - `Makefile` per-target overrides and `LATEST_VERSION`.
-  - The CI matrix in `.github/workflows/docker-publish.yml` (tag format `<awscli>-<python>-<alpine>`).
+  - The `TAGS` env variable in `.github/workflows/docker-publish.yml` — the single build matrix, one entry per `<awscli>-<python>-<alpine>` triple, consumed by the `test`, `build` and `merge` jobs via `fromJSON`.
     A version bump touches all three.
 - **Keep the build matrix small.** By project policy only the latest two AWS CLI versions are kept (see comments in the Makefile and workflow). Drop the oldest when adding a new one.
 - **AWS CLI v1 lives on the `v2` branch note.** The Dockerfile comment points to a `v2` branch for v2 docs; the current build compiles v2 from the pinned git tag.
@@ -104,7 +104,7 @@ Before bumping any pinned version, verify it against the live source:
    ```
 
 3. **Verify the AWS CLI tag actually builds** on the chosen Python + Alpine combination before committing — the compile step (`make-exe`) is version-sensitive.
-4. **Update all three locations** (Dockerfile ARG, Makefile, CI matrix) in the same change and keep the matrix to the latest two AWS CLI versions.
+4. **Update all three locations** (Dockerfile ARG, Makefile, the workflow `TAGS` variable) in the same change and keep the matrix to the latest two AWS CLI versions.
 
 ## Build Gotchas
 
@@ -127,12 +127,14 @@ GitHub Actions workflow `.github/workflows/docker-publish.yml` (`Docker`), trigg
 
 ### Key Jobs
 
-| Job      | Runs when                   | Purpose                                                                                                                                  |
-| -------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `test`   | ref is not `main`           | Build each matrix tag with `--load`, `push: false` — validates the build.                                                                |
-| `deploy` | ref is `main` (or `master`) | Build for `linux/amd64,linux/arm64` and push to `ghcr.io`. Logs in via `docker/login-action` pinned by commit SHA, using `GITHUB_TOKEN`. |
+| Job       | Runs when                   | Purpose                                                                                                                                                                                           |
+| --------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prepare` | always                      | Expose the `TAGS` env variable as a JSON output so the `test`, `build` and `merge` matrices all read one list.                                                                                    |
+| `test`    | ref is not `main`           | Build each matrix tag native amd64 with `--load`, `push: false` — validates the build.                                                                                                            |
+| `build`   | ref is `main` (or `master`) | Matrix of `tag × {amd64, arm64}`. Each arch builds on its native runner (`ubuntu-latest` / `ubuntu-24.04-arm`, no QEMU), pushes the image to `ghcr.io` by digest, uploads a digest artifact.      |
+| `merge`   | ref is `main` (or `master`) | Per tag, download the per-arch digests and assemble the multi-arch manifest with `docker buildx imagetools create`. Logs in via `docker/login-action` pinned by commit SHA, using `GITHUB_TOKEN`. |
 
-Tagging (via `docker/metadata-action`): each version gets a `<awscli>-alpine<alpine>` tag; the version matching `LATEST_VERSION` (from `make print-latest-image-tag`) also gets `latest`; every build gets a `sha`-suffixed tag.
+Tagging (via `docker/metadata-action`, in the `merge` job): each version gets a `<awscli>-alpine<alpine>` tag; the version matching `LATEST_VERSION` (from `make print-latest-image-tag`) also gets `latest`; every build gets a `sha`-suffixed tag.
 
 ## Command Safety
 
