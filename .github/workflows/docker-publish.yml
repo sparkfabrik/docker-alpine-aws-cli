@@ -116,6 +116,15 @@ jobs:
           echo "python_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[2]}')" >> "$GITHUB_OUTPUT"
           echo "alpine_version=$(echo "${{ matrix.tag }}" | awk '{split($0,a,"-"); print a[3]}')" >> "$GITHUB_OUTPUT"
 
+      # imagetools create only assembles the manifest from tags/digests and does
+      # not add OCI labels, so the labels must be baked into each per-arch image
+      # here (as the previous single-build workflow did).
+      - name: Extract metadata (labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+
       # Build single-arch and push by digest (no tag); the merge job assembles
       # the final multi-arch tags from the per-arch digests.
       - name: Build and push image digest
@@ -130,6 +139,7 @@ jobs:
             AWS_CLI_VERSION=${{ steps.vars.outputs.aws_cli_version }}
             PYTHON_VERSION=${{ steps.vars.outputs.python_version }}
             ALPINE_VERSION=${{ steps.vars.outputs.alpine_version }}
+          labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
@@ -198,9 +208,19 @@ jobs:
       - name: Create and push multi-arch manifest
         working-directory: ${{ runner.temp }}/digests
         run: |
+          # Guard the digest set: nullglob turns an empty dir into an empty array
+          # (rather than the literal "*"), and we expect exactly one digest per
+          # architecture in the build matrix (amd64 + arm64). Fail loudly on any
+          # other count instead of feeding a stray file to imagetools create.
+          shopt -s nullglob
+          files=(*)
+          if [ "${#files[@]}" -ne 2 ]; then
+            echo "Expected 2 digest files (amd64, arm64), found ${#files[@]}: ${files[*]}" >&2
+            exit 1
+          fi
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@sha256:%s ' "${files[@]}")
 
       - name: Inspect image
         run: |
