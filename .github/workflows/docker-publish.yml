@@ -9,6 +9,17 @@ env:
   RELEASE_BRANCH: main
   REGISTRY: ghcr.io
   IMAGE_NAME: docker-alpine-aws-cli
+  # Single source of truth for the build matrix. Each entry is
+  # <awscli>-<python>-<alpine>; the test, build and merge matrices all read it.
+  # To keep the number of builds low, we only keep the latest two versions of
+  # the AWS CLI.
+  TAGS: >-
+    [
+      "2.35.15-3.12.13-3.23",
+      "2.35.15-3.12.4-3.20",
+      "2.33.2-3.12.13-3.23",
+      "2.33.2-3.12.4-3.20"
+    ]
 
 # Least-privilege token: read the repo for checkout, push images to GHCR.
 permissions:
@@ -16,19 +27,25 @@ permissions:
   packages: write
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.set.outputs.tags }}
+    steps:
+      - id: set
+        # The `env` context is not available to `strategy.matrix` expressions, so
+        # surface TAGS as a job output that downstream matrices can read.
+        run: echo "tags=$(jq -c . <<< "${TAGS}")" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: prepare
     runs-on: ubuntu-latest
     if: github.ref != 'refs/heads/main'
     name: test ${{ matrix.tag }}
     strategy:
       fail-fast: false
       matrix:
-        tag:
-          # To keep the number of builds low, we only keep the latest two versions of the AWS CLI
-          - 2.35.15-3.12.13-3.23
-          - 2.35.15-3.12.4-3.20
-          - 2.33.2-3.12.13-3.23
-          - 2.33.2-3.12.4-3.20
+        tag: ${{ fromJSON(needs.prepare.outputs.tags) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -60,18 +77,14 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.static_tag }}
 
   build:
+    needs: prepare
     if: contains('["refs/heads/main", "refs/heads/master"]', github.ref)
     runs-on: ${{ matrix.platform.runner }}
     name: build ${{ matrix.tag }} (${{ matrix.platform.arch }})
     strategy:
       fail-fast: false
       matrix:
-        tag:
-          # To keep the number of builds low, we only keep the latest two versions of the AWS CLI
-          - 2.35.15-3.12.13-3.23
-          - 2.35.15-3.12.4-3.20
-          - 2.33.2-3.12.13-3.23
-          - 2.33.2-3.12.4-3.20
+        tag: ${{ fromJSON(needs.prepare.outputs.tags) }}
         # Each platform is a self-contained object (name/runner/arch) so the
         # runner and arch are always defined; amd64 builds on ubuntu-latest and
         # arm64 on a native ubuntu-24.04-arm runner (no QEMU emulation).
@@ -134,18 +147,14 @@ jobs:
           retention-days: 1
 
   merge:
-    needs: [build]
+    needs: [prepare, build]
     if: contains('["refs/heads/main", "refs/heads/master"]', github.ref)
     runs-on: ubuntu-latest
     name: merge ${{ matrix.tag }}
     strategy:
       fail-fast: false
       matrix:
-        tag:
-          - 2.35.15-3.12.13-3.23
-          - 2.35.15-3.12.4-3.20
-          - 2.33.2-3.12.13-3.23
-          - 2.33.2-3.12.4-3.20
+        tag: ${{ fromJSON(needs.prepare.outputs.tags) }}
     steps:
       - uses: actions/checkout@v7
 
