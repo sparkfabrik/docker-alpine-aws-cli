@@ -13,20 +13,20 @@ The `Dockerfile` is a two-stage build: a `python:*-alpine*` builder stage clones
 Everything runs in Docker via `make` and `docker buildx`. No local Python or AWS CLI required.
 
 ```bash
-make build                 # Build the default (latest) tag: 2.35.15-alpine3.23
+make build                 # Build the default (latest) tag: 2.41.1-alpine3.24
 make print-latest-image-tag # Print the LATEST_VERSION used by CI to tag `latest`
 ```
 
 Individual version combinations are built with their own targets:
 
 ```bash
-make build-2.35.15-3.23    # AWS CLI 2.35.15, Python 3.12.13, Alpine 3.23
-make build-2.35.15-3.20    # AWS CLI 2.35.15, Python 3.12.4,  Alpine 3.20
-make build-2.33.2-3.23
-make build-2.33.2-3.20
+make build-2.41.1-3.24     # AWS CLI 2.41.1, Python 3.12.16, Alpine 3.24
+make build-2.41.1-3.23     # AWS CLI 2.41.1, Python 3.12.16, Alpine 3.23
+make build-2.35.15-3.24
+make build-2.35.15-3.23
 ```
 
-The Alpine 3.23 base ships Python 3.12 without `distutils`, which aws-cli's `make-exe`
+The Alpine 3.23 and 3.24 bases ship Python 3.12 without `distutils`, which aws-cli's `make-exe`
 still imports; the Dockerfile installs `setuptools<74` in the builder to restore it.
 
 Each target sets `AWS_CLI_VERSION`, `PYTHON_VERSION`, `ALPINE_VERSION` and calls `build-template`, which runs `docker buildx build --load` with those build args.
@@ -108,9 +108,8 @@ Before bumping any pinned version, verify it against the live source:
 
 ## Build Gotchas
 
-- The Python patch version is coupled to the Alpine minor. Only `python:<patch>-alpine<minor>` tags that exist on Docker Hub are usable. `python:3.12.4-alpine3.23` does not exist; Alpine 3.20 has no Python newer than `3.12.10`; Alpine 3.23 has `3.12.13`. Check Docker Hub for the pair before choosing a `PYTHON_VERSION` — you cannot pin an arbitrary Python patch against an arbitrary Alpine minor.
+- The Python patch version is coupled to the Alpine minor. Only `python:<patch>-alpine<minor>` tags that exist on Docker Hub are usable. `python:3.12.4-alpine3.23` does not exist; Alpine 3.20 has no Python newer than `3.12.10`; Alpine 3.23 and 3.24 both have `3.12.16`. Check Docker Hub for the pair before choosing a `PYTHON_VERSION` — you cannot pin an arbitrary Python patch against an arbitrary Alpine minor.
 - aws-cli's `make-exe` imports `distutils`, which the Python 3.12 stdlib no longer ships. Older Alpine Python images built anyway because their bundled `setuptools` shimmed `distutils`; `setuptools >= 74` (shipped by the Alpine 3.23 Python image) dropped that shim. The builder installs `setuptools<74` to restore it. Removing that line breaks the build with `ModuleNotFoundError: No module named 'distutils'`.
-- aws-cli 2.33.2 prints `UserWarning: pkg_resources is deprecated as an API` on stderr for every command. It is benign and was fixed upstream by 2.35.x. `PYTHONWARNINGS` does not suppress it — the frozen PyInstaller binary emits it during bootstrap, before any warning filter applies. Do not spend time silencing it; it ages out when 2.33.2 leaves the latest-two window.
 - `RUN . venv/bin/activate` in the Dockerfile is a no-op. Each `RUN` is a fresh shell, so the activation does not carry to the next layer. `make-exe` manages its own venv internally, so the line has no effect either way.
 - Build every matrix combination locally before committing a version bump. The compile step is version-sensitive, so a change that builds for one AWS CLI / Python / Alpine triple can still fail for another.
 
